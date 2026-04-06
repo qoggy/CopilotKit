@@ -4,7 +4,6 @@ import type { AbstractAgent } from "@ag-ui/client";
 import type { FrontendTool } from "@copilotkit/core";
 import type React from "react";
 import {
-  createContext,
   useContext,
   type ReactNode,
   useMemo,
@@ -12,7 +11,12 @@ import {
   useReducer,
   useRef,
   useState,
+  createContext,
 } from "react";
+// Context extracted to ../context.ts for cross-platform reuse (React Native)
+import { CopilotKitContext, type CopilotKitContextValue } from "../context";
+export type { CopilotKitContextValue } from "../context";
+export { CopilotKitContext } from "../context";
 import { z } from "zod";
 import { CopilotKitInspector } from "../components/CopilotKitInspector";
 import { LicenseWarningBanner } from "../components/license-warning-banner";
@@ -40,26 +44,6 @@ import type { ReactCustomMessageRenderer } from "../types/react-custom-message-r
 
 const HEADER_NAME = "X-CopilotCloud-Public-Api-Key";
 const COPILOT_CLOUD_CHAT_URL = "https://api.cloud.copilotkit.ai/copilotkit/v1";
-
-// Define the context value interface - idiomatic React naming
-export interface CopilotKitContextValue {
-  copilotkit: CopilotKitCoreReact;
-  /**
-   * Set of tool call IDs currently being executed.
-   * This is tracked at the provider level to ensure tool execution events
-   * are captured even before child components mount.
-   */
-  executingToolCallIds: ReadonlySet<string>;
-}
-
-// Empty set for default context value
-const EMPTY_SET: ReadonlySet<string> = new Set();
-
-// Create the CopilotKit context
-const CopilotKitContext = createContext<CopilotKitContextValue>({
-  copilotkit: null!,
-  executingToolCallIds: EMPTY_SET,
-});
 
 const LicenseContext = createContext<LicenseContextValue>(
   createLicenseContextValue(null),
@@ -576,25 +560,5 @@ export const CopilotKitProvider: React.FC<CopilotKitProviderProps> = ({
   );
 };
 
-// Hook to use the CopilotKit instance - returns the full context value
-export const useCopilotKit = (): CopilotKitContextValue => {
-  const context = useContext(CopilotKitContext);
-  const [, forceUpdate] = useReducer((x) => x + 1, 0);
-
-  if (!context) {
-    throw new Error("useCopilotKit must be used within CopilotKitProvider");
-  }
-  useEffect(() => {
-    const subscription = context.copilotkit.subscribe({
-      onRuntimeConnectionStatusChanged: () => {
-        forceUpdate();
-      },
-    });
-    return () => {
-      subscription.unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return context;
-};
+// Re-export useCopilotKit from context for backward compatibility
+export { useCopilotKit } from "../context";
