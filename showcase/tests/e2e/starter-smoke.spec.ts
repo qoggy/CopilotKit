@@ -1,15 +1,21 @@
 /**
  * E2E smoke tests for Docker-built starter templates.
  *
- * Same test levels as integration-smoke.spec.ts (@health, @agent, @chat)
- * but targeting locally-built Docker containers instead of Railway backends.
- *
+ * Test levels: @health, @agent, @chat, @interaction
  * Targets a running starter container at STARTER_URL (default localhost:3000).
  * The starter is selected by the STARTER env var (default "langgraph-python").
+ *
+ * All starters share the same CopilotKit UI shell, so interaction selectors
+ * are universal — only the agent backend differs per starter.
  */
 
 import { test, expect } from "@playwright/test";
-import { checkHealth, checkAgentEndpoint, sendChatMessage } from "./helpers";
+import {
+  checkHealth,
+  checkAgentEndpoint,
+  sendChatMessage,
+  setupConsoleErrorCollector,
+} from "./helpers";
 
 // ---------------------------------------------------------------------------
 // Starter registry
@@ -44,7 +50,7 @@ const STARTER_URL = process.env.STARTER_URL ?? "http://localhost:3000";
 const activeStarter = STARTERS.find((s) => s.slug === STARTER_SLUG);
 
 // ---------------------------------------------------------------------------
-// Tests — same levels as integration-smoke.spec.ts
+// Tests
 // ---------------------------------------------------------------------------
 
 test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
@@ -84,5 +90,50 @@ test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
     );
     expect(result.gotResponse, "No assistant response received").toBe(true);
     expect(result.responseText.length).toBeGreaterThan(0);
+  });
+
+  test(`@interaction ${STARTER_SLUG} — UI interactions work`, async ({
+    page,
+  }) => {
+    test.slow();
+    const { getErrors } = setupConsoleErrorCollector(page);
+
+    await page.goto(STARTER_URL, {
+      waitUntil: "networkidle",
+      timeout: 30_000,
+    });
+
+    // Remove CopilotKit web inspector overlay (blocks pointer events in dev)
+    await page.evaluate(() => {
+      document
+        .querySelectorAll("cpk-web-inspector")
+        .forEach((el) => el.remove());
+    });
+
+    // All starters share the same CopilotKit UI shell:
+    // Chat/App mode toggle, chat textarea, suggestion pills.
+
+    // Switch to App mode — verify app canvas appears
+    const appBtn = page.locator('button:text-is("App")');
+    await appBtn.waitFor({ state: "visible", timeout: 10_000 });
+    await appBtn.click({ force: true });
+    await page.waitForTimeout(1_000);
+    await expect(page.locator("text=No todos yet").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Switch back to Chat mode — verify textarea reappears
+    const chatBtn = page.locator('button:text-is("Chat")');
+    await chatBtn.click({ force: true });
+    await page.waitForTimeout(1_000);
+    await expect(page.locator("textarea").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Verify no JS errors throughout
+    const errors = getErrors().filter(
+      (e) => !e.includes("favicon") && !e.includes("net::ERR_"),
+    );
+    expect(errors, `JS console errors:\n${errors.join("\n")}`).toHaveLength(0);
   });
 });
