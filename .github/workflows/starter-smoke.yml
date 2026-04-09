@@ -1,0 +1,130 @@
+name: Starter Smoke Tests
+
+on:
+  schedule:
+    # Every 6 hours — catches floating dep breakage
+    - cron: "0 */6 * * *"
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  pull_request:
+    paths:
+      - "examples/integrations/**"
+      - ".github/workflows/starter-smoke.yml"
+  workflow_dispatch:
+    inputs:
+      starter:
+        description: "Starter slug to test (or 'all')"
+        default: "all"
+        type: string
+      install_mode:
+        description: "Install mode: fresh (floating deps) or frozen (lockfile)"
+        default: "fresh"
+        type: choice
+        options:
+          - fresh
+          - frozen
+
+jobs:
+  starter-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        starter: [langgraph-python]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build starter Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: examples/integrations/${{ matrix.starter }}
+          load: true
+          tags: starter-${{ matrix.starter }}:test
+          cache-from: type=gha,scope=starter-${{ matrix.starter }}
+          cache-to: type=gha,mode=max,scope=starter-${{ matrix.starter }}
+          build-args: |
+            INSTALL_MODE=${{ inputs.install_mode || 'fresh' }}
+
+      - name: Start test stack
+        working-directory: examples/integrations/${{ matrix.starter }}
+        run: |
+          COMPOSE_PROJECT_NAME=starter-${{ matrix.starter }} \
+          docker compose -f docker-compose.test.yml up -d
+
+      - name: Wait for app to be ready
+        run: |
+          timeout 120 bash -c \
+            'until curl -sf http://localhost:3000/ > /dev/null 2>&1; do sleep 2; done'
+          echo "App is ready"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install test dependencies
+        working-directory: showcase/tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run starter smoke tests
+        working-directory: showcase/tests
+        env:
+          STARTER: ${{ matrix.starter }}
+          STARTER_URL: http://localhost:3000
+        run: npx playwright test starter-smoke --reporter=github
+
+      - name: Tear down
+        if: always()
+        working-directory: examples/integrations/${{ matrix.starter }}
+        run: docker compose -f docker-compose.test.yml down
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: starter-smoke-${{ matrix.starter }}
+          path: showcase/tests/test-results/
+          retention-days: 7
+
+      - name: Alert Slack on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_OSS_ALERTS }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Starter smoke test failing: *${{ matrix.starter }}*\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+
+      - name: Create GitHub issue on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `[Drift] Starter smoke test failing: ${{ matrix.starter }}`;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'starter-drift',
+              state: 'open',
+            });
+            const existing = issues.find(i => i.title === title);
+            if (!existing) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['starter-drift'],
+                body: `The scheduled starter smoke test for \`${{ matrix.starter }}\` is failing.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nThis likely means a floating dependency update broke the starter. Check the test artifacts for details.`,
+              });
+            }
