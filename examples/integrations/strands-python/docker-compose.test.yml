@@ -42,7 +42,7 @@ services:
     image: mcr.microsoft.com/playwright:v1.52.0-noble
     working_dir: /tests
     volumes:
-      - ../../showcase/tests:/tests:ro
+      - ../../../showcase/tests:/tests
       - test-results:/tests/test-results
     environment:
       - STARTER=${STARTER:-strands-python}
@@ -50,7 +50,7 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    command: ["npx", "playwright", "test", "starter-smoke", "--reporter=list"]
+    command: ["bash", "-c", "cd /tests && npm install --no-audit --no-fund && npx playwright test starter-smoke --reporter=list"]
 
 volumes:
   test-results:
