@@ -6,7 +6,12 @@ RUN corepack enable
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/app/package.json ./apps/app/
-RUN pnpm install --no-frozen-lockfile
+ARG INSTALL_MODE=frozen
+RUN if [ "$INSTALL_MODE" = "fresh" ]; then \
+      pnpm install; \
+    else \
+      pnpm install --frozen-lockfile; \
+    fi
 
 COPY apps/app/ ./apps/app/
 
