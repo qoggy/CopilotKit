@@ -6,12 +6,12 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY docker/requirements-override.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py ./
-COPY src/ ./src/
-COPY knowledge/ ./knowledge/
+COPY agent/server.py ./
+COPY agent/src/ ./src/
+COPY agent/knowledge/ ./knowledge/
 
 EXPOSE 8000
 
