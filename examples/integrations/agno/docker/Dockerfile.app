@@ -12,6 +12,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN node -e "const fs=require('fs'); const f='next.config.ts'; let c=fs.readFileSync(f,'utf8'); if(!c.includes('output')){c=c.replace('};','  output: \"standalone\",\n};'); fs.writeFileSync(f,c);}"
+# Patch hardcoded agent URL to read from AGENT_URL env var at runtime
+RUN sed -i 's|url: "http://localhost:8000/agui"|url: (process.env.AGENT_URL \|\| "http://localhost:8000") + "/agui"|' src/app/api/copilotkit/route.ts
 RUN npm run build
 
 FROM base AS runner
