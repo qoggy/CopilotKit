@@ -6,17 +6,23 @@ RUN corepack enable
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/app/package.json ./apps/app/
-ARG INSTALL_MODE=frozen
+ARG INSTALL_MODE=default
 RUN if [ "$INSTALL_MODE" = "fresh" ]; then \
       pnpm install; \
-    else \
+    elif [ "$INSTALL_MODE" = "frozen" ]; then \
       pnpm install --frozen-lockfile; \
+    else \
+      pnpm install --no-frozen-lockfile; \
     fi
 
 COPY apps/app/ ./apps/app/
+COPY showcase.json ./showcase.json
 
 # Docker override: use AG-UI HttpAgent instead of LangGraphAgent
 # (LangGraphAgent needs Docker-in-Docker which Railway doesn't provide)
+# Replace the catch-all route and remove the [[...slug]] directory to avoid
+# Next.js route specificity conflicts
+RUN rm -rf ./apps/app/src/app/api/copilotkit/\[\[...slug\]\]
 COPY docker-route-override.ts ./apps/app/src/app/api/copilotkit/route.ts
 RUN pnpm --filter @repo/app add @ag-ui/client
 
