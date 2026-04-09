@@ -19,11 +19,11 @@ services:
       aimock:
         condition: service_started
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.get('http://localhost:3000/', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.setTimeout(2000, () => { req.destroy(); process.exit(1); });"]
       interval: 5s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 30s
+      start_period: 60s
 
   tests:
     image: mcr.microsoft.com/playwright:v1.52.0-noble
