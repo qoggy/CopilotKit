@@ -48,6 +48,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "langgraph-js",
@@ -56,6 +57,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "crewai-crews",
@@ -64,6 +66,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "pydantic-ai",
@@ -90,6 +93,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "llamaindex",
@@ -98,6 +102,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "langgraph-fastapi",
@@ -106,6 +111,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "strands-python",
@@ -114,6 +120,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "ms-agent-framework-python",
@@ -122,6 +129,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "ms-agent-framework-dotnet",
@@ -130,6 +138,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
 ];
 
@@ -225,9 +234,10 @@ test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
       const textarea = page.locator("textarea").first();
       await textarea.waitFor({ state: "visible", timeout: 10_000 });
 
-      // Verify suggestion buttons are rendered
-      const suggestions = page.locator("button").filter({ hasText: /Generative UI|Frontend Tools|Human In the Loop/ });
-      await expect(suggestions.first()).toBeVisible({ timeout: 10_000 });
+      // Verify the sidebar rendered with its title
+      await expect(
+        page.locator("text=Popup Assistant").first(),
+      ).toBeVisible({ timeout: 10_000 });
     }
 
     // Verify no JS errors throughout
