@@ -28,6 +28,8 @@ interface Starter {
   healthPaths: string[];
   agentPath: string;
   chatMessage: string;
+  /** Whether the starter has Chat/App mode toggle (default true) */
+  hasAppMode?: boolean;
 }
 
 const STARTERS: Starter[] = [
@@ -70,6 +72,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "adk",
@@ -78,6 +81,7 @@ const STARTERS: Starter[] = [
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     chatMessage: "Hello",
+    hasAppMode: false,
   },
   {
     slug: "agno",
@@ -198,25 +202,33 @@ test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
         .forEach((el) => el.remove());
     });
 
-    // All starters share the same CopilotKit UI shell:
-    // Chat/App mode toggle, chat textarea, suggestion pills.
+    if (activeStarter!.hasAppMode !== false) {
+      // Starters with Chat/App mode toggle (showcase shell)
+      const appBtn = page.locator('button:text-is("App")');
+      await appBtn.waitFor({ state: "visible", timeout: 10_000 });
+      await appBtn.click({ force: true });
+      await page.waitForTimeout(1_000);
+      await expect(page.locator("text=No todos yet").first()).toBeVisible({
+        timeout: 10_000,
+      });
 
-    // Switch to App mode — verify app canvas appears
-    const appBtn = page.locator('button:text-is("App")');
-    await appBtn.waitFor({ state: "visible", timeout: 10_000 });
-    await appBtn.click({ force: true });
-    await page.waitForTimeout(1_000);
-    await expect(page.locator("text=No todos yet").first()).toBeVisible({
-      timeout: 10_000,
-    });
+      // Switch back to Chat mode — verify textarea reappears
+      const chatBtn = page.locator('button:text-is("Chat")');
+      await chatBtn.click({ force: true });
+      await page.waitForTimeout(1_000);
+      await expect(page.locator("textarea").first()).toBeVisible({
+        timeout: 10_000,
+      });
+    } else {
+      // Starters with CopilotSidebar (no Chat/App toggle)
+      // Verify the sidebar chat UI is present and interactive
+      const textarea = page.locator("textarea").first();
+      await textarea.waitFor({ state: "visible", timeout: 10_000 });
 
-    // Switch back to Chat mode — verify textarea reappears
-    const chatBtn = page.locator('button:text-is("Chat")');
-    await chatBtn.click({ force: true });
-    await page.waitForTimeout(1_000);
-    await expect(page.locator("textarea").first()).toBeVisible({
-      timeout: 10_000,
-    });
+      // Verify suggestion buttons are rendered
+      const suggestions = page.locator("button").filter({ hasText: /Generative UI|Frontend Tools|Human In the Loop/ });
+      await expect(suggestions.first()).toBeVisible({ timeout: 10_000 });
+    }
 
     // Verify no JS errors throughout
     const errors = getErrors().filter(

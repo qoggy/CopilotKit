@@ -195,6 +195,27 @@ export async function sendChatMessage(
     return { gotResponse: true, responseText: text.trim() };
   }
 
+  // Fallback: CopilotSidebar may not use data-testid="copilot-assistant-message".
+  // Detect response by looking for new text content that appeared after our message.
+  // The "Regenerate response" button appears next to assistant messages in the sidebar.
+  const pageText = await page.locator("body").textContent();
+  const userMsgIndex = pageText?.lastIndexOf(message) ?? -1;
+  if (userMsgIndex >= 0) {
+    const afterUserMsg = (pageText ?? "").slice(userMsgIndex + message.length).trim();
+    // Filter out UI chrome text (buttons, labels) — look for substantial text
+    const stripped = afterUserMsg
+      .replace(/Regenerate response/g, "")
+      .replace(/Copy to clipboard/g, "")
+      .replace(/Thumbs (up|down)/g, "")
+      .replace(/Powered by CopilotKit/g, "")
+      .replace(/Type a message\.\.\./g, "")
+      .replace(/Send/g, "")
+      .trim();
+    if (stripped.length > 5) {
+      return { gotResponse: true, responseText: stripped.split("\n")[0].trim() };
+    }
+  }
+
   return { gotResponse: false, responseText: "" };
 }
 
