@@ -1,0 +1,31 @@
+# Docker Compose stack for e2e smoke testing with aimock.
+# Usage: docker compose -f docker-compose.test.yml up -d
+services:
+  aimock:
+    image: ghcr.io/copilotkit/aimock:latest
+    ports:
+      - "4010:4010"
+    volumes:
+      - ./fixtures:/fixtures:ro
+    command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_MODE: fresh
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENAI_API_KEY=test-key-for-aimock
+      - OPENAI_BASE_URL=http://aimock:4010/v1
+    depends_on:
+      aimock:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
