@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Copy package manifest and install
 COPY package.json ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 # Build the application
 FROM base AS builder

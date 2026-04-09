@@ -30,6 +30,13 @@ COPY --from=deps /app/apps/agent/node_modules ./apps/agent/node_modules
 
 COPY . .
 
+# Next.js 16 uses Turbopack by default; set root so it resolves `next` from monorepo
+RUN node -e "\
+const fs=require('fs'); const f='apps/web/next.config.ts'; \
+let c=fs.readFileSync(f,'utf8'); \
+if(!c.includes('turbopack')){c=c.replace('};','  turbopack: { root: \"../..\" },\n};');} \
+fs.writeFileSync(f,c);"
+
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm --filter web build
 
