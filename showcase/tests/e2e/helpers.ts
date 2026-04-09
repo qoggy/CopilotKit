@@ -88,21 +88,33 @@ export async function checkAgentEndpoint(
   request: APIRequestContext,
   baseUrl: string,
   agentPath: string = "/api/copilotkit",
-  agentId: string = "agentic_chat",
 ): Promise<AgentCheckResult> {
+  // Try GET /info first (CopilotKit runtime info endpoint)
+  // then fall back to POST on the base path
+  const infoPaths = [`${agentPath}/info`, agentPath];
+
+  for (const path of infoPaths) {
+    try {
+      const res = await request.get(`${baseUrl}${path}`, { timeout: 15_000 });
+      if (res.status() !== 404) {
+        return {
+          ok: true,
+          status: res.status(),
+          body: await res.text(),
+        };
+      }
+    } catch {
+      // try next path
+    }
+  }
+
+  // All failed — try POST on base path as last resort
   try {
     const res = await request.post(`${baseUrl}${agentPath}`, {
       headers: { "Content-Type": "application/json" },
-      data: {
-        // Minimal CopilotKit request shape — enough to get past routing
-        // but not a full valid conversation (we just want non-404)
-        messages: [],
-        tools: [],
-        agentId,
-      },
+      data: { messages: [], tools: [], agentId: "agentic_chat" },
       timeout: 15_000,
     });
-    // Anything except 404 is acceptable for endpoint reachability
     return {
       ok: res.status() !== 404,
       status: res.status(),

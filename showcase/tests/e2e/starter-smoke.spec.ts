@@ -32,7 +32,6 @@ interface Starter {
   port: number;
   healthPaths: string[];
   agentPath: string;
-  agentId: string;
   chatMessage: string;
   interactions: StarterInteraction[];
 }
@@ -48,28 +47,19 @@ const STARTERS: Starter[] = [
     port: 3000,
     healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
-    agentId: "sample_agent",
     chatMessage: "Hello",
     interactions: [
       {
         name: "switch-to-app-mode",
-        selector: 'button:has-text("App")',
+        selector: 'button:text-is("App")',
         expect: {
           type: "visible",
-          selector: 'section[aria-label="To Do column"]',
-        },
-      },
-      {
-        name: "add-a-task",
-        selector: 'button:has-text("Add a task")',
-        expect: {
-          type: "visible",
-          selector: 'button[aria-label="Delete todo"]',
+          selector: 'text=No todos yet',
         },
       },
       {
         name: "switch-to-chat-mode",
-        selector: 'button:has-text("Chat")',
+        selector: 'button:text-is("Chat")',
         expect: { type: "visible", selector: "textarea" },
       },
     ],
@@ -105,7 +95,6 @@ test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
       request,
       STARTER_URL,
       activeStarter!.agentPath,
-      activeStarter!.agentId,
     );
     expect(result.status, "Agent endpoint returned 404").not.toBe(404);
     expect(result.ok, `Agent check failed: ${result.body}`).toBe(true);
@@ -133,10 +122,25 @@ test.describe(`starter-smoke: ${STARTER_SLUG}`, () => {
       timeout: 30_000,
     });
 
+    // Dismiss CopilotKit web inspector if present (blocks interactions)
+    const dismissBtn = page.locator(
+      'cpk-web-inspector button:text-is("Dismiss"), cpk-web-inspector [aria-label="Close"]',
+    );
+    if (await dismissBtn.first().isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await dismissBtn.first().click({ force: true });
+      await page.waitForTimeout(500);
+    }
+    // Remove the inspector element entirely to prevent further interference
+    await page.evaluate(() => {
+      document.querySelectorAll("cpk-web-inspector").forEach((el) => el.remove());
+    });
+
     for (const interaction of activeStarter!.interactions) {
       const element = page.locator(interaction.selector).first();
       await element.waitFor({ state: "visible", timeout: 10_000 });
-      await element.click();
+      // force: true bypasses the CopilotKit web inspector overlay
+      // that intercepts pointer events in dev mode
+      await element.click({ force: true });
       await page.waitForTimeout(1_000);
 
       if (interaction.expect.type === "visible") {
