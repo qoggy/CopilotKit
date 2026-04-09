@@ -1,0 +1,213 @@
+/**
+ * Shared test helpers for E2E smoke tests.
+ *
+ * Used by both integration-smoke.spec.ts (showcase backends on Railway)
+ * and starter-smoke.spec.ts (Docker-built starters with aimock).
+ */
+
+import { type APIRequestContext, type Page } from "@playwright/test";
+
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
+
+export interface HealthCheckResult {
+  ok: boolean;
+  status: number;
+  path: string;
+  body: string;
+}
+
+export interface AgentCheckResult {
+  ok: boolean;
+  status: number;
+  body: string;
+}
+
+export interface ChatResult {
+  gotResponse: boolean;
+  responseText: string;
+}
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+/**
+ * Try multiple health endpoint paths, return the first that responds 200.
+ */
+export async function checkHealth(
+  request: APIRequestContext,
+  baseUrl: string,
+  paths: string[] = ["/api/health", "/health"],
+): Promise<HealthCheckResult> {
+  for (const path of paths) {
+    try {
+      const res = await request.get(`${baseUrl}${path}`, {
+        timeout: 15_000,
+      });
+      if (res.ok()) {
+        return {
+          ok: true,
+          status: res.status(),
+          path,
+          body: await res.text(),
+        };
+      }
+    } catch {
+      // try next path
+    }
+  }
+  // All paths failed — report the first one tried
+  try {
+    const res = await request.get(`${baseUrl}${paths[0]}`, {
+      timeout: 10_000,
+    });
+    return {
+      ok: false,
+      status: res.status(),
+      path: paths[0],
+      body: await res.text(),
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 0, path: paths[0], body: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agent endpoint check
+// ---------------------------------------------------------------------------
+
+/**
+ * POST to the CopilotKit runtime endpoint to verify the agent is reachable.
+ * We send a minimal CopilotKit-shaped request. The key check is that we do NOT
+ * get a 404 (which was the HttpAgent->LangGraphAgent bug symptom).
+ */
+export async function checkAgentEndpoint(
+  request: APIRequestContext,
+  baseUrl: string,
+  agentPath: string = "/api/copilotkit",
+  agentId: string = "agentic_chat",
+): Promise<AgentCheckResult> {
+  try {
+    const res = await request.post(`${baseUrl}${agentPath}`, {
+      headers: { "Content-Type": "application/json" },
+      data: {
+        // Minimal CopilotKit request shape — enough to get past routing
+        // but not a full valid conversation (we just want non-404)
+        messages: [],
+        tools: [],
+        agentId,
+      },
+      timeout: 15_000,
+    });
+    // Anything except 404 is acceptable for endpoint reachability
+    return {
+      ok: res.status() !== 404,
+      status: res.status(),
+      body: await res.text(),
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 0, body: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chat interaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Navigate to a page and interact with the chat.
+ */
+export async function sendChatMessage(
+  page: Page,
+  baseUrl: string,
+  message: string,
+  path: string = "/",
+): Promise<ChatResult> {
+  const url = `${baseUrl}${path}`;
+  await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+
+  // Wait for the chat UI to be ready — CopilotKit renders a textarea
+  const textarea = page.locator("textarea").first();
+  await textarea.waitFor({ state: "visible", timeout: 15_000 });
+
+  // Count existing messages before sending
+  const messagesBefore = await page
+    .locator('[data-testid="copilot-assistant-message"]')
+    .count();
+
+  // Type and send
+  await textarea.fill(message);
+  await textarea.press("Enter");
+
+  // Wait for a new assistant message to appear
+  try {
+    await page.waitForFunction(
+      ({ selector, countBefore }) => {
+        const msgs = document.querySelectorAll(selector);
+        return msgs.length > countBefore;
+      },
+      {
+        selector: '[data-testid="copilot-assistant-message"]',
+        countBefore: messagesBefore,
+      },
+      { timeout: 60_000 },
+    );
+  } catch {
+    // Fallback: look for any new content that appeared after our message
+    // This handles cases where the selector doesn't match
+    await page.waitForTimeout(5_000);
+  }
+
+  // Extract the latest assistant message text, waiting for content to stream in
+  const assistantMessages = page.locator(
+    '[data-testid="copilot-assistant-message"]',
+  );
+  const count = await assistantMessages.count();
+  if (count > messagesBefore) {
+    const latest = assistantMessages.nth(count - 1);
+    // Wait for the message to have non-empty text (streaming may still be in progress)
+    try {
+      await page.waitForFunction(
+        (el) => (el?.textContent?.trim().length ?? 0) > 0,
+        await latest.elementHandle(),
+        { timeout: 60_000 },
+      );
+    } catch {
+      // Streaming may be slow; continue with whatever we have
+    }
+    const text = (await latest.textContent()) ?? "";
+    return { gotResponse: true, responseText: text.trim() };
+  }
+
+  return { gotResponse: false, responseText: "" };
+}
+
+// ---------------------------------------------------------------------------
+// Console error collector
+// ---------------------------------------------------------------------------
+
+/**
+ * Attach listeners for console errors and page errors.
+ * Returns an accessor to retrieve collected errors.
+ */
+export function setupConsoleErrorCollector(page: Page): {
+  getErrors: () => string[];
+} {
+  const errors: string[] = [];
+
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      errors.push(`[console.error] ${msg.text()}`);
+    }
+  });
+
+  page.on("pageerror", (err) => {
+    errors.push(`[pageerror] ${err.message}`);
+  });
+
+  return { getErrors: () => [...errors] };
+}
