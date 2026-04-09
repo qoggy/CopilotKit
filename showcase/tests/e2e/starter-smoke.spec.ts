@@ -46,7 +46,7 @@ const STARTERS: Starter[] = [
     slug: "langgraph-python",
     path: "examples/integrations/langgraph-python",
     port: 3000,
-    healthPaths: ["/health"],
+    healthPaths: ["/api/health", "/health", "/"],
     agentPath: "/api/copilotkit",
     agentId: "sample_agent",
     chatMessage: "Hello",

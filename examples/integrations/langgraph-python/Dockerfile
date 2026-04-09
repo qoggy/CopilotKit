@@ -6,23 +6,12 @@ RUN corepack enable
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/app/package.json ./apps/app/
-ARG INSTALL_MODE=default
-RUN if [ "$INSTALL_MODE" = "fresh" ]; then \
-      pnpm install; \
-    elif [ "$INSTALL_MODE" = "frozen" ]; then \
-      pnpm install --frozen-lockfile; \
-    else \
-      pnpm install --no-frozen-lockfile; \
-    fi
+RUN pnpm install --no-frozen-lockfile
 
 COPY apps/app/ ./apps/app/
-COPY showcase.json ./showcase.json
 
 # Docker override: use AG-UI HttpAgent instead of LangGraphAgent
 # (LangGraphAgent needs Docker-in-Docker which Railway doesn't provide)
-# Replace the catch-all route and remove the [[...slug]] directory to avoid
-# Next.js route specificity conflicts
-RUN rm -rf ./apps/app/src/app/api/copilotkit/\[\[...slug\]\]
 COPY docker-route-override.ts ./apps/app/src/app/api/copilotkit/route.ts
 RUN pnpm --filter @repo/app add @ag-ui/client
 
@@ -50,7 +39,7 @@ WORKDIR /app
 COPY apps/agent/ ./apps/agent/
 # Install ag-ui-langgraph FIRST at pinned version (before copilotkit can override it)
 RUN uv pip install --system "ag-ui-langgraph[fastapi]==0.0.22" && \
-    uv pip install --system --no-deps "copilotkit==0.1.86" && \
+    uv pip install --system --no-deps "copilotkit==0.1.78" && \
     uv pip install --system "partialjson>=0.0.8,<0.0.9" "toml>=0.10.2,<0.11.0" && \
     uv pip install --system \
     "langchain==1.0.1" \
