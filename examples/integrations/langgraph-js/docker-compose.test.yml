@@ -4,8 +4,6 @@
 services:
   aimock:
     image: ghcr.io/copilotkit/aimock:latest
-    ports:
-      - "4010:4010"
     volumes:
       - ./fixtures:/fixtures:ro
     command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
@@ -14,8 +12,6 @@ services:
     build:
       context: ./apps/agent
       dockerfile: ../../docker/Dockerfile.agent
-    ports:
-      - "8123:8123"
     environment:
       - OPENAI_API_KEY=test-key-for-aimock
       - OPENAI_BASE_URL=http://aimock:4010/v1
@@ -33,8 +29,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.app
-    ports:
-      - "3000:3000"
     environment:
       - LANGGRAPH_DEPLOYMENT_URL=http://agent:8123
     depends_on:
@@ -46,3 +40,20 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  tests:
+    image: mcr.microsoft.com/playwright:v1.52.0-noble
+    working_dir: /tests
+    volumes:
+      - ../../showcase/tests:/tests:ro
+      - test-results:/tests/test-results
+    environment:
+      - STARTER=${STARTER:-langgraph-js}
+      - STARTER_URL=http://app:3000
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["npx", "playwright", "test", "starter-smoke", "--reporter=list"]
+
+volumes:
+  test-results:
