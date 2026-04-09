@@ -1,0 +1,45 @@
+services:
+  aimock:
+    image: ghcr.io/copilotkit/aimock:latest
+    ports:
+      - "4010:4010"
+    volumes:
+      - ./fixtures:/fixtures:ro
+    command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: ../docker/Dockerfile.agent
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=test-key-for-aimock
+      - GOOGLE_GENAI_USE_VERTEXAI=false
+    depends_on:
+      aimock:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    ports:
+      - "3000:3000"
+    environment:
+      - AGENT_URL=http://agent:8000
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
